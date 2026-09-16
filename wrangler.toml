@@ -1,0 +1,6 @@
+name = "milli-e-misfatti"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-01-01"
+
+# This file configures Cloudflare Pages builds only. Deployment remains an
+# explicit release action; CI validates but never publishes.

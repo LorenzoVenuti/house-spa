@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Milli e Misfatti</title>
+  <rect width="512" height="512" rx="112" fill="#101b32"/>
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#f3dfb8" stroke-width="22"/>
+  <text x="256" y="292" fill="#fbf8f0" font-family="Georgia, serif" font-size="128" font-weight="700" text-anchor="middle">MM</text>
+  <circle cx="256" cy="115" r="14" fill="#c48a38"/>
+</svg>

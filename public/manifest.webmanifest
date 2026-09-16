@@ -1,0 +1,15 @@
+{
+  "name": "Milli e Misfatti",
+  "short_name": "Milli",
+  "description": "Turni, presenze e milli per la famiglia.",
+  "lang": "it-IT",
+  "start_url": "/today",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbf8f0",
+  "theme_color": "#101b32",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
