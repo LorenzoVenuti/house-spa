@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: SQL static checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d supabase ]]; then
+            echo "No supabase directory yet; SQL checks skipped."
+            exit 0
+          fi
+          sql_count=0
+          while IFS= read -r -d '' file; do
+            sql_count=$((sql_count + 1))
+            if grep -nE 'service_role|SUPABASE_SERVICE_ROLE_KEY|VITE_SUPABASE_SERVICE' "$file"; then
+              echo "Forbidden secret reference in $file" >&2
+              exit 1
+            fi
+          done < <(find supabase -type f -name '*.sql' -print0)
+          echo "Checked $sql_count SQL files for leaked service credentials."
