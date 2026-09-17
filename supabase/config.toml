@@ -1,4 +1,4 @@
-project_id = "milli-e-misfatti"
+project_id = "house-spa"
 
 [api]
 enabled = true
@@ -25,7 +25,7 @@ enabled = true
 [auth]
 enabled = true
 site_url = "http://localhost:5174"
-additional_redirect_urls = []
+additional_redirect_urls = ["http://localhost:5174"]
 
 [auth.email]
 enable_signup = false

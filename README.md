@@ -1,6 +1,6 @@
-# Milli e Misfatti
+# House S.p.A.
 
-**Milli e Misfatti** is an installable, iPhone-oriented family PWA for coordinating chores, meal attendance, presence at home, and a playful internal currency called **milli**. Version **1.1.3** runs in Demo Mode. Provider setup and deployment have not been performed.
+**House S.p.A.** is an installable, iPhone-oriented family PWA for coordinating chores, meal attendance, presence at home, and a playful internal currency called **milli**. Version **1.1.3** currently runs in Demo Mode. Provider setup and deployment have not been performed.
 
 ## Features
 
@@ -9,7 +9,9 @@
 - Role-aware navigation and server-side authorization contracts
 - Hostile takeovers with reserved funds and parent-reviewed refusal penalties
 - Voluntary black-market deals that transfer existing milli
-- NFC entry points with explicit confirmation for presence and ordinary activities
+- NFC entry points that immediately record presence and ordinary activities
+- Staff-reviewed activity truth: parents and referees can invalidate a false claim while preserving its audit history and reversing its reward
+- Monthly cumulative activity chart with one colored line per participant
 - Parent corrections with audit requirements
 - Parent-only family management for adding, deactivating, and reactivating profiles
 - Sunday scheduling, reduced single-participant rewards, and family-scoped data
@@ -24,7 +26,7 @@ Reverse auctions, euro fines, debt collection, Reserve payouts, and final monthl
 | Mamma, Papà | Parent | Manage family profiles, create tasks, record performers, apply corrections, and review penalties; participant-only deals, takeovers, and activity rewards are excluded |
 | Cleaning Lady | Referee | Create ordinary tasks and record performers; cannot issue prizes or fines |
 
-The fixed display names are anonymized. Internal fixture identifiers are stable implementation details and are not user-facing names.
+All fixed demo profiles are synthetic and anonymized. Internal fixture identifiers are stable implementation details and are not user-facing names.
 
 In **Gestisci famiglia** at `/admin`, a parent can create a profile, deactivate it, or reactivate it. Deactivation preserves historical tasks, meals, wallet entries, takeovers, deals, and audit relationships while excluding the profile from future activity and the global profile selector. The current profile cannot deactivate itself, and the final active parent cannot be deactivated.
 
@@ -37,7 +39,7 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. The development server uses port `5174` with strict port selection. Demo data persists in local browser storage; use browser site-data controls to reset it.
+Open `http://localhost:5174`. The development server uses port `5174` with strict port selection. Demo data persists in local browser storage; use browser site-data controls to reset it.
 
 ## Verification
 
@@ -62,12 +64,13 @@ See [docs/BACKEND.md](./docs/BACKEND.md) for the database and authorization mode
 
 | Route | Purpose |
 | --- | --- |
-| `/t/entrance` | Confirm arrival or departure |
-| `/t/dishes` | Confirm an open dishes task |
-| `/t/rubbish` | Confirm an open rubbish task |
-| `/t/parcel` | Confirm an open parcel task |
+| `/t/arrive?tag=<token>` | Record arrival immediately |
+| `/t/leave?tag=<token>` | Record departure immediately |
+| `/t/dishes?tag=<token>` | Complete today's open dishes task immediately |
+| `/t/rubbish?tag=<token>` | Complete today's open rubbish task immediately |
+| `/t/parcel?tag=<token>` | Complete today's open parcel task immediately |
 
-Opening an NFC URL never records an action by itself. The selected active profile must explicitly confirm the action. Physical tags and iPhone scan behavior have not yet been tested.
+Opening a valid NFC URL is the user's declaration and records the action without a second confirmation. Arrival and departure use separate tags. Duplicate arrival/departure scans that do not change the current state are ignored, while task completion remains idempotent. Parents and referees can later mark a claimed activity as not performed; the completion stays in the audit history, its milli reward is reversed, and the activity no longer appears in the monthly cumulative count. Physical tags and iPhone scan behavior have not yet been tested.
 
 ## Architecture and data modes
 
@@ -100,14 +103,14 @@ The browser must never own authoritative balance mutations in connected mode. Re
 - `public/`: PWA manifest, icons, an unregistered static offline page, and SPA redirect
 - `.github/workflows/ci.yml`: non-deploying verification workflow
 - `docs/DEPLOYMENT.md`: procedural managed-service setup and rollback guidance
-- `docs/RELEASE.md`: release gates and private-publication preparation
+- `docs/RELEASE.md`: release and publication-update gates
 
 ## Current limitations
 
 - The visible app runs only in Demo Mode; real authentication and connected Supabase data are not enabled.
 - No service worker or offline routing is registered; `public/offline.html` is a static branded asset, not an active fallback.
-- No GitHub release, live Supabase project, Cloudflare site, production scheduler, SMTP sender, or deployment has been created by this project work.
-- NFC routes are implemented, but physical tags and iPhone behavior are unverified.
+- No live Supabase project, Cloudflare site, production scheduler, SMTP sender, or deployment has been created by this project work.
+- NFC routes and correction behavior are implemented in Demo Mode, but physical tags, secure connected-mode tag provisioning, and iPhone behavior are unverified.
 - Database contract tests require the Supabase CLI or a compatible PostgreSQL test environment.
 - Deferred financial and ranking rules remain unavailable, as documented in [DECISIONS.md](./DECISIONS.md).
 
@@ -122,4 +125,4 @@ Keep secrets out of source control and browser bundles. Family data is sensitive
 - [Release procedure](./docs/RELEASE.md)
 - [Backend contract](./docs/BACKEND.md)
 
-This private repository is all rights reserved; see [LICENSE](./LICENSE).
+This repository is distributed under an all-rights-reserved notice. See [LICENSE](./LICENSE).

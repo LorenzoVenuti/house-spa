@@ -27,6 +27,7 @@ declare
   child_three uuid := '00000000-0000-0000-0001-000000000003';
   parent_one uuid := '00000000-0000-0000-0000-000000000002';
   parent_two uuid := '00000000-0000-0000-0000-000000000003';
+  referee_one uuid := '00000000-0000-0000-0000-000000000004';
   other_family uuid := '20000000-0000-0000-0000-000000000001';
   other_member uuid := '20000000-0000-0000-0000-000000000002';
   dishes uuid;
@@ -61,14 +62,16 @@ begin
     ('10000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'child-1@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
     ('10000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'child-2@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
     ('10000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'child-3@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
-    ('10000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'parent-1@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb)
+    ('10000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'parent-1@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
+    ('10000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'referee@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb)
   on conflict (id) do nothing;
   update public.members set auth_user_id =
     case id when child_one then '10000000-0000-0000-0000-000000000001'::uuid
             when child_two then '10000000-0000-0000-0000-000000000002'::uuid
             when child_three then '10000000-0000-0000-0000-000000000003'::uuid
-            when parent_one then '10000000-0000-0000-0000-000000000004'::uuid end
-  where id in (child_one, child_two, child_three, parent_one);
+            when parent_one then '10000000-0000-0000-0000-000000000004'::uuid
+            when referee_one then '10000000-0000-0000-0000-000000000005'::uuid end
+  where id in (child_one, child_two, child_three, parent_one, referee_one);
   select id into dishes from public.activity_catalog where family_id = family and code = 'dishes';
   insert into public.wallet_ledger(family_id, member_id, kind, amount_milli, description)
   values(family, child_one, 'correction', 30, 'test funding'), (family, child_two, 'correction', 10, 'test funding');
@@ -90,6 +93,16 @@ begin
   end if;
   select balance_milli into balance from public.member_balances where member_id = child_one;
   if balance <> 33 then raise exception 'completion reward was duplicated or missing: %', balance; end if;
+
+  -- A referee can invalidate a claimed activity; history remains and the reward is reversed.
+  perform set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000005', true);
+  correction := public.invalidate_task_completion((first->>'completionId')::uuid, 'Claim was not true', gen_random_uuid());
+  if correction->>'status' <> 'invalidated' then raise exception 'referee invalidation failed'; end if;
+  if (select status from public.task_completions where id = (first->>'completionId')::uuid) <> 'invalidated' then raise exception 'completion history was not invalidated'; end if;
+  if (select balance_milli from public.member_balances where member_id = child_one) <> 30 then raise exception 'invalidated reward was not reversed'; end if;
+  if not exists (select 1 from public.audit_events where target_id = (first->>'completionId')::uuid and event_type = 'activity_invalidated') then raise exception 'completion invalidation was not audited'; end if;
+  perform set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+  perform public.complete_task(task_id, gen_random_uuid(), null);
 
   -- Participant cannot apply a parent correction.
   caught := false;

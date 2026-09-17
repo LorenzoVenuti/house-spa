@@ -17,7 +17,9 @@ describe('role permissions', () => {
   it('allows referee operational recording without wallet powers', () => {
     expect(can('referee', 'create-task')).toBe(true);
     expect(can('referee', 'record-for-other')).toBe(true);
+    expect(can('referee', 'invalidate-completion')).toBe(true);
     expect(can('referee', 'trade')).toBe(false);
+    expect(can('participant', 'invalidate-completion')).toBe(false);
   });
 
   it('shows role-aware navigation', () => {

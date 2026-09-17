@@ -6,11 +6,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   return <div className="app-shell">{children}</div>;
 }
 
-export function Topbar({ title = 'Milli e Misfatti', meta, children }: { title?: string; meta?: string; children?: ReactNode }) {
+export function Topbar({ title = 'House S.p.A.', meta, children }: { title?: string; meta?: string; children?: ReactNode }) {
   return (
     <header className="topbar">
       <a className="topbar__brand" href="/today" aria-label="Vai alla pagina Oggi">
-        <span className="topbar__mark" aria-hidden="true">MM</span>
+        <span className="topbar__mark" aria-hidden="true">HS</span>
         <span>
           <span className="topbar__title">{title}</span>
           {meta ? <span className="topbar__meta">{meta}</span> : null}

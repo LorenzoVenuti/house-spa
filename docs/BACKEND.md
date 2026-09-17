@@ -1,4 +1,4 @@
-# Milli e Misfatti backend
+# House S.p.A. backend
 
 This document describes backend contract version 1.1.3. The backend is a family-scoped Supabase/PostgreSQL schema. All money-like operations are ledger transactions; the client never writes balances directly.
 
@@ -18,7 +18,13 @@ The local project uses `supabase/config.toml`, migrations under `supabase/migrat
 
 All domain rows carry `family_id`. RLS allows authenticated family members to read shared household records. Parent-only audit data and notifications are narrower. Mutations involving managed members, tasks, reservations, wallet entries, takeovers, deals, and corrections are exposed as security-definer RPCs with server-side role and family checks.
 
-Important RPCs are `create_managed_member`, `set_member_active`, `complete_task`, `create_takeover`, `resolve_takeover`, `create_deal`, `accept_deal`, `settle_deal`, and `apply_parent_correction`. Transactional task, takeover, deal, and correction RPCs require a UUID idempotency key. A retry with the same operation/key and request returns the stored result; a reused key with different input raises `IDEMPOTENCY_CONFLICT`.
+Important RPCs are `create_managed_member`, `set_member_active`, `complete_task`, `invalidate_task_completion`, `create_takeover`, `resolve_takeover`, `create_deal`, `accept_deal`, `settle_deal`, and `apply_parent_correction`. Transactional task, takeover, deal, and correction RPCs require a UUID idempotency key. A retry with the same operation/key and request returns the stored result; a reused key with different input raises `IDEMPOTENCY_CONFLICT`.
+
+## Activity truth and NFC
+
+`complete_task` records an app, NFC, or staff declaration as immediately valid. NFC completions require an active family tag whose hashed token maps to the task's activity. Arrival and departure use separate tag actions, and repeated scans that already match the current home state do not create another presence event.
+
+Every completion snapshots its reward and remains in history. `invalidate_task_completion` is available to parents and referees, requires a reason, marks the completion invalid, appends an equal negative `activity_reversal` entry to the wallet ledger, reopens the task, and writes an audit event. It never deletes the original declaration. Monthly activity totals count only valid completion attributions and count activities rather than milli; a completed hostile takeover is attributed to both payer and performer while only the performer receives the reward.
 
 ## Managed members
 
@@ -34,6 +40,6 @@ Production scheduling should call these functions from Supabase Cron or an equiv
 
 ## Tests and limitations
 
-`supabase/tests/contract_assertions.sql` provides deterministic schema, signature, grant, seed, and constraint checks. `supabase/tests/rpc_invariants.sql` creates transactional synthetic auth fixtures and exercises authorization, idempotency, member management, meal seeding, scheduling, takeover accounting, deal settlement, deactivation history, and inactive-member rejection. Both are intended for `supabase test db` and roll back their behavioral fixtures. No credentials, deployment, external service, real NFC hardware, push notifications, email delivery, or euro payments are configured by this slice.
+`supabase/tests/contract_assertions.sql` provides deterministic schema, signature, grant, seed, and constraint checks. `supabase/tests/rpc_invariants.sql` creates transactional synthetic auth fixtures and exercises authorization, idempotency, activity invalidation and reward reversal, member management, meal seeding, scheduling, takeover accounting, deal settlement, deactivation history, and inactive-member rejection. Both are intended for `supabase test db` and roll back their behavioral fixtures. No credentials, deployment, external service, real NFC hardware, push notifications, email delivery, or euro payments are configured by this slice.
 
 The parent-correction RPC intentionally supports takeover refusal confirmation and wallet delta corrections first. Unsupported target types fail closed and are recorded only after a future migration adds their mutation contract.

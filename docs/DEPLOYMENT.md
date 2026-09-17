@@ -1,6 +1,6 @@
 # Deployment procedure
 
-This document is a procedure for a future private Milli e Misfatti pilot. **No live deployment, Supabase project, Cloudflare Pages site, production scheduler, or SMTP integration has been created or configured by this project work.** Version 1.1.3 currently runs locally in Demo Mode.
+This document is a procedure for a future private House S.p.A. pilot. **No live deployment, Supabase project, Cloudflare Pages site, production scheduler, or SMTP integration has been created or configured by this project work.** Version 1.1.3 currently runs locally in Demo Mode.
 
 The intended managed-service shape is a static React frontend on Cloudflare Pages, a Supabase project in an EU region for authentication and PostgreSQL, and Resend SMTP for invitation and recovery email. No payment service is in scope.
 
@@ -9,7 +9,7 @@ The intended managed-service shape is a static React frontend on Cloudflare Page
 Before provisioning any service:
 
 1. Complete the gates in [RELEASE.md](./RELEASE.md).
-2. Create and review a private GitHub repository only through an explicitly authorized publication workflow.
+2. Prepare repository updates only through the explicitly authorized, sanitized publication workflow.
 3. Confirm service ownership, billing responsibility, target region, data retention, and administrator access.
 4. Confirm the physical NFC tags and supported phones in a local test.
 5. Record a rollback owner and a secure incident-reporting channel.
@@ -21,7 +21,7 @@ Before provisioning any service:
 3. Configure private, invitation-only Supabase Auth. Public sign-up remains disabled.
 4. Configure a verified sender in Resend and connect it to Supabase only after invitation and password-reset copy has been reviewed.
 5. Configure a trusted scheduler, such as Supabase Cron, to call the reviewed weekly-generation and task-opening database functions. The migration does not create an external production schedule.
-6. Create a Cloudflare Pages project for the authorized private repository with build command `npm run build`, output directory `dist`, and Node.js 24.
+6. Create a Cloudflare Pages project for the authorized repository with build command `npm run build`, output directory `dist`, and Node.js 24.
 7. Add environment variables separately for preview and production, then test role boundaries before promotion.
 
 ## Environment variables
@@ -58,9 +58,9 @@ Before any production migration, create an export or provider backup, verify tha
 
 ## Cloudflare Pages promotion
 
-The checked-in CI workflow verifies the project and never deploys. Configure preview builds only after a private remote exists. Promote production manually after the v1.1.3 release checklist passes and the exact commit, Pages project, environment variables, and target URL are confirmed.
+The checked-in CI workflow verifies the project and never deploys. Configure preview builds only after the remote is verified. Promote production manually after the v1.1.3 release checklist passes and the exact commit, Pages project, environment variables, and target URL are confirmed.
 
-The intended Pages project slug is `milli-e-misfatti`; `wrangler.toml` contains build metadata only. Installing or authenticating deployment tooling and executing a publish command are separate, explicitly authorized actions.
+The intended Pages project slug is `house-spa`; `wrangler.toml` contains build metadata only. Installing or authenticating deployment tooling and executing a publish command are separate, explicitly authorized actions.
 
 ## Post-deployment smoke test
 
@@ -69,7 +69,7 @@ In a non-production environment first, verify:
 - invitation-only login and recovery email;
 - participant, referee, and parent navigation and denied actions;
 - Today and calendar reads;
-- one explicit presence update and one NFC confirmation route;
+- one automatic NFC presence route and one automatic NFC activity route;
 - family-profile creation, deactivation, reactivation, and history preservation;
 - idempotent wallet, takeover, deal, and correction operations;
 - scheduler timing in `Europe/Rome`, including a daylight-saving boundary;

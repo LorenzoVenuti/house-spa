@@ -9,6 +9,7 @@ import {
   memberSelectionStorageKey,
   readInitialMemberId,
 } from '../lib/adapter';
+import { buildMonthlyActivitySeries } from '../lib/activity-series';
 import { formatHouseholdDateTimeLocal, householdDateTimeToIso, isoDay, seedSnapshot } from '../lib/demo-data';
 import type { AppSnapshot } from '../lib/types';
 
@@ -39,6 +40,11 @@ const createRoleOrderedLegacySnapshot = () => {
   });
   snapshot.presence.forEach((event) => { event.memberId = remap(event.memberId); });
   snapshot.tasks.forEach((task) => { if (task.assigneeId) task.assigneeId = remap(task.assigneeId); });
+  snapshot.completions.forEach((completion) => {
+    completion.performedByMemberId = remap(completion.performedByMemberId);
+    completion.recordedByMemberId = remap(completion.recordedByMemberId);
+    completion.countedMemberIds = completion.countedMemberIds.map(remap);
+  });
   snapshot.wallet.forEach((entry) => { entry.memberId = remap(entry.memberId); });
   snapshot.takeovers.forEach((takeover) => {
     takeover.payerId = remap(takeover.payerId);
@@ -97,6 +103,50 @@ describe('demo adapter local flows', () => {
     expect(adapter.balance('child-1')).toBe(21);
   });
 
+  it('lets parents and referees invalidate a claimed activity and reverses its reward', async () => {
+    const adapter = new DemoAdapter(seedSnapshot(new Date('2026-09-17T12:00:00.000Z')));
+    const completed = await adapter.complete_task({ taskId: 'task-rubbish', idempotencyKey: 'complete', performedByMemberId: 'child-1', source: 'nfc', tagToken: 'demo-rubbish' });
+    adapter.setActiveMember('referee-1');
+    await adapter.invalidate_task_completion({ completionId: String(completed.completionId), reason: 'Non era stata svolta', idempotencyKey: 'invalidate' });
+    const snapshot = await adapter.snapshot();
+    expect(snapshot.completions.find((item) => item.id === completed.completionId)).toMatchObject({ status: 'invalidated', invalidatedByMemberId: 'referee-1', invalidationReason: 'Non era stata svolta' });
+    expect(snapshot.tasks.find((item) => item.id === 'task-rubbish')).toMatchObject({ status: 'assigned', assigneeId: 'child-1' });
+    expect(snapshot.wallet.filter((entry) => entry.taskId === 'task-rubbish').map((entry) => [entry.kind, entry.amount])).toEqual([
+      ['activity_reward', 1],
+      ['activity_reversal', -1],
+    ]);
+    expect(adapter.balance('child-1')).toBe(20);
+    expect(buildMonthlyActivitySeries(snapshot, '2026-09').series.find((series) => series.memberId === 'child-1')?.values.at(-1)).toBe(2);
+  });
+
+  it('rejects participant attempts to invalidate another activity', async () => {
+    const adapter = new DemoAdapter(seedSnapshot());
+    const completion = (await adapter.snapshot()).completions[0];
+    await expect(adapter.invalidate_task_completion({ completionId: completion.id, reason: 'No', idempotencyKey: 'not-staff' })).rejects.toThrow('FORBIDDEN');
+  });
+
+  it('builds one cumulative monthly line per participant from valid activities', () => {
+    const snapshot = seedSnapshot(new Date('2026-09-17T12:00:00.000Z'));
+    const chart = buildMonthlyActivitySeries(snapshot, '2026-09');
+    expect(chart.days).toHaveLength(30);
+    expect(chart.series.map((series) => [series.memberId, series.values.at(-1)])).toEqual([
+      ['child-1', 2],
+      ['child-2', 1],
+      ['child-3', 1],
+    ]);
+  });
+
+  it('requires the matching NFC tag and ignores duplicate presence state', async () => {
+    const adapter = new DemoAdapter(seedSnapshot());
+    await expect(adapter.recordPresence('leave', 'nfc', 'demo-arrive')).rejects.toThrow('INVALID_STATE');
+    await adapter.recordPresence('leave', 'nfc', 'demo-leave');
+    await adapter.recordPresence('leave', 'nfc', 'demo-leave');
+    const snapshot = await adapter.snapshot();
+    expect(snapshot.members.find((member) => member.id === 'child-1')?.home).toBe(false);
+    expect(snapshot.presence.filter((event) => event.memberId === 'child-1' && event.action === 'leave')).toHaveLength(1);
+    await expect(adapter.complete_task({ taskId: 'task-rubbish', idempotencyKey: 'wrong-tag', performedByMemberId: 'child-1', source: 'nfc', tagToken: 'demo-dishes' })).rejects.toThrow('INVALID_STATE');
+  });
+
   it('resolves a takeover and credits only the performer', async () => {
     const seed = seedSnapshot();
     seed.wallet.push({ id: 'wallet-test', memberId: 'child-1', kind: 'correction', amount: 10, label: 'Test funding', at: new Date().toISOString() });
@@ -111,7 +161,9 @@ describe('demo adapter local flows', () => {
     await adapter.resolve_takeover({ takeoverId: String(created.takeoverId), resolution: 'completed', idempotencyKey: 'resolve' });
     expect(adapter.balance('child-1')).toBe(21);
     expect(adapter.balance('child-2')).toBe(5);
-    expect((await adapter.snapshot()).wallet.filter((entry) => entry.memberId === 'child-2' && entry.kind === 'activity_reward')).toHaveLength(2);
+    const snapshot = await adapter.snapshot();
+    expect(snapshot.wallet.filter((entry) => entry.memberId === 'child-2' && entry.kind === 'activity_reward')).toHaveLength(2);
+    expect(snapshot.completions.find((completion) => completion.taskId === 'task-dishes-today')?.countedMemberIds).toEqual(['child-2', 'child-1']);
   });
 
   it('does not credit a takeover performer twice when completion precedes resolution', async () => {
@@ -189,6 +241,8 @@ describe('demo adapter local flows', () => {
       expect(snapshot.meals.every((meal) => fixedIds.has(meal.memberId) && meal.id === `meal-${meal.date}-${meal.memberId}-${meal.type}`)).toBe(true);
       expect(snapshot.presence.every((event) => fixedIds.has(event.memberId))).toBe(true);
       expect(snapshot.tasks.every((task) => !task.assigneeId || fixedIds.has(task.assigneeId))).toBe(true);
+      expect(snapshot.completions.every((completion) => fixedIds.has(completion.performedByMemberId) && fixedIds.has(completion.recordedByMemberId))).toBe(true);
+      expect(snapshot.completions.every((completion) => completion.countedMemberIds.every((memberId) => fixedIds.has(memberId)))).toBe(true);
       expect(snapshot.takeovers.every((takeover) => fixedIds.has(takeover.payerId) && fixedIds.has(takeover.recipientId))).toBe(true);
       expect(snapshot.deals.every((deal) => fixedIds.has(deal.buyerId) && fixedIds.has(deal.providerId))).toBe(true);
       expect(snapshot.wallet.some((entry) => entry.memberId === 'managed-profile-1' && entry.id === 'managed-wallet')).toBe(true);

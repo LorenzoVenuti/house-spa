@@ -1,14 +1,17 @@
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from './app-context';
 import { adapter, defaultMemberId, formatDate, formatTime, memberName } from '../lib/adapter';
+import { buildMonthlyActivitySeries, currentHouseholdMonth } from '../lib/activity-series';
 import { formatHouseholdDateTimeLocal, householdDateTimeToIso, isoDay } from '../lib/demo-data';
 import { can } from '../lib/permissions';
 import type { Deal, MealPlanStatus, Role, Task } from '../lib/types';
+import { MonthlyActivityChart } from '../ui/MonthlyActivityChart';
 
 const initials = (name: string) => name.split(' ').map((part) => part[0]).join('').slice(0, 2);
 const idempotency = () => crypto.randomUUID();
 const money = (value: number) => `${value >= 0 ? '+' : ''}${value} milli`;
 const roleLabels: Record<Role, string> = { participant: 'Partecipante', referee: 'Arbitro', parent: 'Genitore' };
+const nfcLabels: Record<string, string> = { arrive: 'Arrivo a casa', leave: 'Uscita da casa', dishes: 'Turno piatti', rubbish: 'Turno spazzatura', parcel: 'Ritiro pacco' };
 
 export function Login() {
   const { snapshot, setMemberId } = useApp();
@@ -16,7 +19,7 @@ export function Login() {
   const [selected, setSelected] = useStateLocal(defaultMemberId);
   const activeMembers = snapshot.members.filter((member) => member.active);
   const selectedMemberId = activeMembers.some((member) => member.id === selected) ? selected : (activeMembers[0]?.id ?? '');
-  return <div className="page login-page"><div className="login-card card"><span className="brand-mark large">MM</span><p className="eyebrow">ACCESSO FAMILIARE</p><h1>Il tribunale<br />è aperto.</h1><p>Scegli il tuo profilo per esplorare il prototipo condiviso.</p><label className="field"><span>Profilo</span><select value={selectedMemberId} onChange={(event) => setSelected(event.target.value)}>{activeMembers.map((member) => <option value={member.id} key={member.id}>{member.displayName} · {roleLabels[member.role]}</option>)}</select></label><button className="button button-primary" disabled={!selectedMemberId} onClick={() => { setMemberId(selectedMemberId); navigate('/today'); }}>Entra in modalità demo</button><small>I dati restano solo su questo dispositivo.</small></div></div>;
+  return <div className="page login-page"><div className="login-card card"><span className="brand-mark large">HS</span><p className="eyebrow">HOUSE S.P.A.</p><h1>Bentornato.</h1><p>Scegli il tuo profilo per continuare.</p><label className="field"><span>Profilo</span><select value={selectedMemberId} onChange={(event) => setSelected(event.target.value)}>{activeMembers.map((member) => <option value={member.id} key={member.id}>{member.displayName} · {roleLabels[member.role]}</option>)}</select></label><button className="button button-primary" disabled={!selectedMemberId} onClick={() => { setMemberId(selectedMemberId); navigate('/today'); }}>Continua</button><small>I dati restano solo su questo dispositivo.</small></div></div>;
 }
 
 function useStateLocal(initial: string) { const [value, setValue] = React.useState(initial); return [value, setValue] as const; }
@@ -28,11 +31,11 @@ export function Today() {
   const myBalance = snapshot.wallet.filter((entry) => entry.memberId === member.id).reduce((sum, entry) => sum + entry.amount, 0);
   const dinner = snapshot.meals.find((meal) => meal.date === today && meal.type === 'dinner' && meal.memberId === member.id);
   const [message, setMessage] = React.useState('');
-  const complete = async (task: Task) => { try { await adapter.complete_task({ taskId: task.id, idempotencyKey: idempotency(), performedByMemberId: member.id }); setMessage('Verdetto registrato. Milli accreditati.'); refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Operazione non riuscita'); } };
-  return <><div className="page-heading"><div><p className="eyebrow">{formatDate(today)}</p><h1>Buonasera, {member.displayName}.</h1><p className="lede">Ecco lo stato del regno domestico.</p></div><span className="pill">{member.role === 'parent' ? 'AMMINISTRAZIONE' : member.role === 'referee' ? 'ARBITRO' : 'PARTECIPANTE'}</span></div>
+  const complete = async (task: Task) => { try { await adapter.complete_task({ taskId: task.id, idempotencyKey: idempotency(), performedByMemberId: member.id, source: 'app' }); setMessage('Attività completata. Milli accreditati.'); refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Operazione non riuscita'); } };
+  return <><div className="page-heading"><div><p className="eyebrow">{formatDate(today)}</p><h1>Buonasera, {member.displayName}.</h1><p className="lede">Tutto quello che serve per oggi.</p></div><span className="pill">{member.role === 'parent' ? 'AMMINISTRAZIONE' : member.role === 'referee' ? 'ARBITRO' : 'PARTECIPANTE'}</span></div>
     {message && <div className="card notice" role="status">{message}</div>}
     <section className="card-grid hero-grid"><article className="card stat"><span>Il tuo saldo</span><strong>{myBalance}<small> milli</small></strong><Link to="/milli">Vedi movimenti →</Link></article><article className="card stat"><span>A cena</span><strong>{dinner?.status === 'present' ? 'Ci sei' : dinner?.status === 'absent' ? 'Assente' : 'Da decidere'}</strong><MealToggle mealId={dinner?.id} status={dinner?.status} onChange={refresh} /></article><article className="card stat"><span>In casa ora</span><strong>{snapshot.members.filter((item) => item.active && item.home && item.role === 'participant').length}<small> partecipanti</small></strong><span className="muted">Aggiornato con NFC</span></article></section>
-    <section><div className="section-heading"><h2>Il tuo docket</h2><Link to="/calendar">Calendario →</Link></div><div className="card-grid">{tasks.map((task) => <TaskCard key={task.id} task={task} member={member} snapshot={snapshot} onComplete={complete} />)}{!tasks.length && <div className="card empty-state">Nessun atto in programma oggi.</div>}</div></section>
+    <section><div className="section-heading"><h2>Le cose da fare</h2><Link to="/calendar">Calendario →</Link></div><div className="card-grid task-board">{tasks.map((task) => <TaskCard key={task.id} task={task} member={member} snapshot={snapshot} onComplete={complete} />)}{!tasks.length && <div className="card empty-state">Nessuna attività in programma per oggi.</div>}</div></section>
     {(member.role === 'referee' || member.role === 'parent') && <OperationsCard snapshot={snapshot} refresh={refresh} />}
   </>;
 }
@@ -42,12 +45,15 @@ function OperationsCard({ snapshot, refresh }: { snapshot: ReturnType<typeof use
   const [title, setTitle] = React.useState('Portare fuori la spazzatura');
   const [dueAt, setDueAt] = React.useState(() => formatHouseholdDateTimeLocal(new Date(Date.now() + 4 * 60 * 60_000)));
   const [taskId, setTaskId] = React.useState(''); const [performer, setPerformer] = React.useState(defaultMemberId); const [message, setMessage] = React.useState('');
+  const [completionId, setCompletionId] = React.useState(''); const [invalidationReason, setInvalidationReason] = React.useState('');
   const openTasks = snapshot.tasks.filter((task) => ['open', 'assigned'].includes(task.status));
+  const validCompletions = snapshot.completions.filter((completion) => completion.status === 'valid').sort((left, right) => right.completedAt.localeCompare(left.completedAt));
   const activeParticipants = snapshot.members.filter((person) => person.active && person.role === 'participant');
   const selectedPerformer = activeParticipants.some((person) => person.id === performer) ? performer : (activeParticipants[0]?.id ?? '');
   const create = async (event: React.FormEvent) => { event.preventDefault(); try { await adapter.create_on_demand_task({ activityCode, title, dueAt: householdDateTimeToIso(dueAt), idempotencyKey: idempotency() }); setMessage('Attività creata e aperta ai partecipanti.'); refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Attività non creata'); } };
-  const record = async () => { if (!taskId || !selectedPerformer) return; try { await adapter.complete_task({ taskId, idempotencyKey: idempotency(), performedByMemberId: selectedPerformer }); setMessage('Esecutore registrato e ricompensa calcolata.'); refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Esecutore non registrato'); } };
-  return <section className="card operations-card"><div className="section-heading"><div><p className="eyebrow">OPERAZIONI</p><h2>Apri o registra un’attività</h2></div><span className="pill">Arbitro / Genitore</span></div>{message && <div className="notice" role="status">{message}</div>}<div className="card-grid"><form onSubmit={create}><label className="field"><span>Tipo</span><select value={activityCode} onChange={(event) => { const code = event.target.value as 'rubbish' | 'parcel'; setActivityCode(code); setTitle(code === 'rubbish' ? 'Portare fuori la spazzatura' : 'Ritirare il pacco Amazon'); }}><option value="rubbish">Spazzatura · 1 milli</option><option value="parcel">Pacco Amazon · 2 milli</option></select></label><label className="field"><span>Titolo</span><input required value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="field"><span>Scadenza</span><input required type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label><button className="button button-primary">Crea attività</button></form><div><label className="field"><span>Attività aperta</span><select value={taskId} onChange={(event) => setTaskId(event.target.value)}><option value="">Seleziona un turno</option>{openTasks.map((task) => <option value={task.id} key={task.id}>{task.title} · {task.rewardMilli} milli</option>)}</select></label><label className="field"><span>Eseguita da</span><select value={selectedPerformer} onChange={(event) => setPerformer(event.target.value)}>{activeParticipants.map((person) => <option value={person.id} key={person.id}>{person.displayName}</option>)}</select></label><button type="button" className="button" disabled={!taskId || !selectedPerformer} onClick={() => void record()}>Registra esecutore</button></div></div></section>;
+  const record = async () => { if (!taskId || !selectedPerformer) return; try { await adapter.complete_task({ taskId, idempotencyKey: idempotency(), performedByMemberId: selectedPerformer, source: 'staff' }); setMessage('Esecutore registrato e ricompensa calcolata.'); refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Esecutore non registrato'); } };
+  const invalidate = async () => { if (!completionId || !invalidationReason.trim()) return; try { await adapter.invalidate_task_completion({ completionId, reason: invalidationReason, idempotencyKey: idempotency() }); setCompletionId(''); setInvalidationReason(''); setMessage('Attività annullata: premio stornato e storico conservato.'); refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Attività non annullata'); } };
+  return <section className="card operations-card"><div className="section-heading"><div><p className="eyebrow">OPERAZIONI</p><h2>Apri, registra o rettifica un’attività</h2></div><span className="pill">Arbitro / Genitore</span></div>{message && <div className="notice" role="status">{message}</div>}<div className="card-grid"><form onSubmit={create}><label className="field"><span>Tipo</span><select value={activityCode} onChange={(event) => { const code = event.target.value as 'rubbish' | 'parcel'; setActivityCode(code); setTitle(code === 'rubbish' ? 'Portare fuori la spazzatura' : 'Ritirare il pacco Amazon'); }}><option value="rubbish">Spazzatura · 1 milli</option><option value="parcel">Pacco Amazon · 2 milli</option></select></label><label className="field"><span>Titolo</span><input required value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="field"><span>Scadenza</span><input required type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label><button className="button button-primary">Crea attività</button></form><div><label className="field"><span>Attività aperta</span><select value={taskId} onChange={(event) => setTaskId(event.target.value)}><option value="">Seleziona un turno</option>{openTasks.map((task) => <option value={task.id} key={task.id}>{task.title} · {task.rewardMilli} milli</option>)}</select></label><label className="field"><span>Eseguita da</span><select value={selectedPerformer} onChange={(event) => setPerformer(event.target.value)}>{activeParticipants.map((person) => <option value={person.id} key={person.id}>{person.displayName}</option>)}</select></label><button type="button" className="button" disabled={!taskId || !selectedPerformer} onClick={() => void record()}>Registra esecutore</button></div><div className="completion-review"><label className="field"><span>Attività dichiarata</span><select value={completionId} onChange={(event) => setCompletionId(event.target.value)}><option value="">Seleziona una registrazione</option>{validCompletions.map((completion) => { const task = snapshot.tasks.find((item) => item.id === completion.taskId); return <option value={completion.id} key={completion.id}>{task?.title ?? 'Attività'} · {memberName(snapshot, completion.performedByMemberId)} · {formatDate(completion.completedAt.slice(0, 10))}</option>; })}</select></label><label className="field"><span>Motivo della rettifica</span><textarea required value={invalidationReason} onChange={(event) => setInvalidationReason(event.target.value)} placeholder="Es. attività dichiarata ma non svolta" /></label><button type="button" className="button button-danger" disabled={!completionId || !invalidationReason.trim()} onClick={() => void invalidate()}>Segna come non svolta</button></div></div></section>;
 }
 
 function MealToggle({ mealId, status, onChange }: { mealId?: string; status?: MealPlanStatus; onChange: () => void }) {
@@ -62,8 +68,10 @@ function TaskCard({ task, member, snapshot, onComplete }: { task: Task; member: 
 
 export function Calendar() {
   const { snapshot, member } = useApp();
+  const [chartMonth, setChartMonth] = React.useState(currentHouseholdMonth());
+  const chartData = React.useMemo(() => buildMonthlyActivitySeries(snapshot, chartMonth), [snapshot, chartMonth]);
   const dates = Array.from({ length: 7 }, (_, index) => isoDay(index));
-  return <><div className="page-heading"><div><p className="eyebrow">SETTIMANA CORRENTE</p><h1>Calendario</h1><p className="lede">Presenze dichiarate per tutta la famiglia.</p></div><span className="pill">{snapshot.members.filter((item) => item.active && item.home).length} in casa</span></div><section className="calendar-list">{dates.map((date) => <article className="card calendar-day" key={date}><div className="date-label"><strong>{new Intl.DateTimeFormat('it-IT', { weekday: 'short' }).format(new Date(`${date}T12:00:00`))}</strong><span>{new Date(`${date}T12:00:00`).getDate()}</span></div><div className="calendar-content"><MealRoster date={date} type="dinner" snapshot={snapshot} activeMemberId={member.id} />{snapshot.meals.some((meal) => meal.date === date && meal.type === 'lunch') && <MealRoster date={date} type="lunch" snapshot={snapshot} activeMemberId={member.id} />}{snapshot.tasks.filter((task) => task.date === date).map((task) => <div className="task-row" key={task.id}><span>{task.title}</span><span className="pill">{task.status === 'completed' ? 'Fatto' : task.assigneeId === member.id ? 'Tuo turno' : task.status === 'open' ? 'Aperto' : memberName(snapshot, task.assigneeId)}</span></div>)}</div></article>)}</section></>;
+  return <><div className="page-heading"><div><p className="eyebrow">SETTIMANA CORRENTE</p><h1>Calendario</h1><p className="lede">Presenze dichiarate e andamento delle attività.</p></div><span className="pill">{snapshot.members.filter((item) => item.active && item.home).length} in casa</span></div><article className="card activity-chart-card"><div className="section-heading"><div><p className="eyebrow">CONTRIBUTI DEL MESE</p><h2>Attività cumulative</h2></div><label className="field compact-month"><span className="sr-only">Mese del grafico</span><input type="month" value={chartMonth} onChange={(event) => setChartMonth(event.target.value)} /></label></div><p className="muted">Ogni attività valida alza di uno la linea del partecipante. Le rettifiche rimuovono il punto dal conteggio.</p><MonthlyActivityChart data={chartData} /></article><section className="calendar-list">{dates.map((date) => <article className="card calendar-day" key={date}><div className="date-label"><strong>{new Intl.DateTimeFormat('it-IT', { weekday: 'short' }).format(new Date(`${date}T12:00:00`))}</strong><span>{new Date(`${date}T12:00:00`).getDate()}</span></div><div className="calendar-content"><MealRoster date={date} type="dinner" snapshot={snapshot} activeMemberId={member.id} />{snapshot.meals.some((meal) => meal.date === date && meal.type === 'lunch') && <MealRoster date={date} type="lunch" snapshot={snapshot} activeMemberId={member.id} />}{snapshot.tasks.filter((task) => task.date === date).map((task) => <div className="task-row" key={task.id}><span>{task.title}</span><span className="pill">{task.status === 'completed' ? 'Fatto' : task.assigneeId === member.id ? 'Tuo turno' : task.status === 'open' ? 'Aperto' : memberName(snapshot, task.assigneeId)}</span></div>)}</div></article>)}</section></>;
 }
 function MealRoster({ date, type, snapshot, activeMemberId }: { date: string; type: 'lunch' | 'dinner'; snapshot: ReturnType<typeof useApp>['snapshot']; activeMemberId: string }) { const activeMembers = snapshot.members.filter((person) => person.active); const plans = snapshot.meals.filter((meal) => meal.date === date && meal.type === type && activeMembers.some((person) => person.id === meal.memberId)); return <div className="meal-roster"><div className="meal-row"><strong>{type === 'dinner' ? '🍽 Cena' : '☀️ Pranzo'}</strong><span className="eyebrow">{plans.filter((meal) => meal.status === 'present').length}/{activeMembers.length} presenti</span></div><div className="attendance-grid">{activeMembers.map((person) => { const meal = plans.find((item) => item.memberId === person.id); return <div className="attendance-item" key={person.id}><span>{person.displayName}</span>{meal ? <MealStatus meal={meal} editable={person.id === activeMemberId} onChange={(status) => void adapter.setMealStatus(meal.id, status)} /> : <span className="pill">—</span>}</div>; })}</div></div>; }
 function MealStatus({ meal, editable, onChange }: { meal: { status: MealPlanStatus }; editable: boolean; onChange?: (status: MealPlanStatus) => void }) { const label = meal.status === 'present' ? 'Presente' : meal.status === 'absent' ? 'Assente' : 'Da confermare'; return editable && onChange ? <button className="pill button-quiet" onClick={() => onChange(meal.status === 'present' ? 'absent' : 'present')}>{label}</button> : <span className="pill">{label}</span>; }
@@ -205,16 +213,43 @@ export function Admin() {
 
 export function NfcAction() {
   const { token } = useParams();
+  const [searchParams] = useSearchParams();
   const { member, snapshot, refresh } = useApp();
-  const [message, setMessage] = React.useState('');
-  const [busy, setBusy] = React.useState(false);
+  const [message, setMessage] = React.useState('Registrazione in corso…');
+  const started = React.useRef(false);
+  const tagToken = searchParams.get('tag') ?? '';
   const today = isoDay(0);
-  const task = token && ['dishes', 'rubbish', 'parcel'].includes(token) ? snapshot.tasks.find((item) => item.date === today && item.activityCode === token && ['open', 'assigned'].includes(item.status)) : undefined;
-  const labels: Record<string, string> = { entrance: 'Presenza all’ingresso', dishes: 'Turno piatti', rubbish: 'Turno spazzatura', parcel: 'Ritiro pacco' };
-  const label = labels[token ?? ''] ?? 'Azione NFC';
-  const run = async (action: 'arrive' | 'leave') => { setBusy(true); try { await adapter.recordPresence(action); setMessage(action === 'arrive' ? 'Arrivo registrato.' : 'Uscita registrata.'); refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Presenza non registrata'); } finally { setBusy(false); } };
-  const complete = async () => { if (!task || member.role !== 'participant') return; setBusy(true); try { const result = await adapter.complete_task({ taskId: task.id, idempotencyKey: idempotency(), performedByMemberId: member.id }); setMessage(result.alreadyCompleted ? 'Questo turno era già stato registrato.' : `Turno completato: +${String(result.rewardMilli)} milli.`); refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Turno non completato'); } finally { setBusy(false); } };
-  return <div className="card nfc-card"><span className="brand-mark large">MM</span><p className="eyebrow">TAG NFC · {token}</p><h1>{label}</h1><p>Conferma esplicita richiesta per {member.displayName}. Aprire il link non registra automaticamente nulla.</p>{message && <div className="notice" role="status">{message}</div>}{token === 'entrance' ? <div className="button-row"><button className="button button-primary" disabled={busy} onClick={() => void run('arrive')}>Sono arrivato</button><button className="button" disabled={busy} onClick={() => void run('leave')}>Sto uscendo</button></div> : !task ? <div className="empty-state">Nessun turno {token ? 'aperto corrispondente' : 'riconosciuto'} per oggi.</div> : member.role !== 'participant' ? <div className="empty-state">Solo i partecipanti possono completare un turno NFC.</div> : <button className="button button-primary" disabled={busy} onClick={() => void complete()}>Conferma completamento · {task.rewardMilli} milli</button>}<Link to="/today">Torna a Oggi</Link></div>;
+  const task = token && ['dishes', 'rubbish', 'parcel'].includes(token) ? snapshot.tasks
+    .filter((item) => item.date === today && item.activityCode === token && ['open', 'assigned'].includes(item.status))
+    .sort((left, right) => Number(right.assigneeId === member.id) - Number(left.assigneeId === member.id) || left.dueAt.localeCompare(right.dueAt))[0] : undefined;
+  const label = nfcLabels[token ?? ''] ?? 'Azione NFC';
+  React.useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    const run = async () => {
+      if (!tagToken || !token || !nfcLabels[token]) { setMessage('Tag NFC non valido.'); return; }
+      try {
+        if (token === 'arrive' || token === 'leave') {
+          await adapter.recordPresence(token, 'nfc', tagToken);
+          setMessage(token === 'arrive' ? 'Arrivo registrato.' : 'Uscita registrata.');
+        } else if (!task) {
+          setMessage('Nessun turno aperto corrispondente per oggi.');
+          return;
+        } else if (member.role !== 'participant') {
+          setMessage('Solo i partecipanti possono completare un turno NFC.');
+          return;
+        } else {
+          const result = await adapter.complete_task({ taskId: task.id, idempotencyKey: idempotency(), performedByMemberId: member.id, source: 'nfc', tagToken });
+          setMessage(result.alreadyCompleted ? 'Questo turno era già stato registrato.' : `Turno completato automaticamente: +${String(result.rewardMilli)} milli.`);
+        }
+        refresh();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Azione NFC non registrata');
+      }
+    };
+    void run();
+  }, [member.id, member.role, refresh, tagToken, task, token]);
+  return <div className="card nfc-card"><span className="brand-mark large">HS</span><p className="eyebrow">TAG NFC · {token}</p><h1>{label}</h1><p>La scansione vale come dichiarazione di {member.displayName}. Genitori e arbitro possono rettificarla successivamente.</p><div className="notice" role="status">{message}</div><Link to="/today">Torna a Oggi</Link></div>;
 }
 
 // React is imported as a namespace for compact route components.

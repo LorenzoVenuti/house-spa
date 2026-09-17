@@ -1,9 +1,9 @@
-# Milli e Misfatti — Product Decisions
+# House S.p.A. — Product Decisions
 
-Status: version 1.1.3 is the current private repository baseline; managed-service integration and deployment remain unperformed.
+Status: version 1.1.3 implemented locally; managed-service integration and deployment remain unperformed.
 Last updated: 2026-09-16.
 
-This document records the current product decisions. Explicit corrections replace earlier proposals. Open questions below are not implemented rules. The product name is **Milli e Misfatti**. Product and technical documentation use English; the interface uses Italian.
+This document records the current product decisions. Explicit corrections replace earlier proposals. Open questions below are not implemented rules. The product name is **House S.p.A.**. Product and technical documentation use English; the interface uses Italian.
 
 ## 1. Purpose and scope
 
@@ -26,7 +26,7 @@ Start with three ordinary activities. Broader features should be delivered incre
 | Papà | Parent administrator | Same administrator rights |
 | Cleaning Lady | Referee | Create tasks and record who performed them; cannot issue prizes or fines |
 
-The three competing participants use the anonymized fixed display names Child 1, Child 2, and Child 3.
+The public demo uses the fixed, anonymized display names Child 1, Child 2, Child 3, Mamma, Papà, and Cleaning Lady.
 
 Family meal and activity calendars include parents as well as children. Cleaning Lady is an additional profile; her inclusion as a meal attendee is not explicitly settled.
 
@@ -76,9 +76,9 @@ The scheduler still balances work using the full base value, before this reward 
 Keep two distinct concepts:
 
 1. Planned meal attendance: present, absent, or unconfirmed for lunch and dinner on each date.
-2. Actual presence at home: check-in and check-out using NFC, with manual correction available.
+2. Actual presence at home: check-in and check-out using two distinct NFC tags, with manual correction available.
 
-NFC entry actions should explicitly select arrival or departure rather than silently toggling state on every scan. Household meal planning and future scheduling use planned attendance; takeover eligibility uses actual presence at home.
+Scanning an NFC tag is itself a declaration: it records the action immediately without another confirmation screen. Arrival and departure use separate tags rather than toggling one ambiguous state. Completing an activity from either its NFC tag or the app is immediately considered true. A parent or referee can later invalidate a false completion with a mandatory reason; the immutable history remains, the reward is reversed, and the task is reopened. Household meal planning and future scheduling use planned attendance; takeover eligibility uses actual presence at home.
 
 Being in a hurry to leave does not exempt a participant from a takeover. A participant who is away is not eligible. Leaving after receiving a valid takeover does not automatically cancel it.
 
@@ -206,7 +206,7 @@ The eligibility snapshot time, prize amount cutoff, confirmation/payment lifecyc
 ## 12. Remaining product decisions
 
 1. Phones and NFC tag compatibility; final identity and login rollout for configured profiles.
-2. Definition of a task occurrence, opening and completion deadlines, and duplicate-scan behavior.
+2. Definition of a task occurrence and final opening and completion deadlines.
 3. Attendance source for ranking; present-to-absent dinner changes; forgotten check-outs and late changes.
 4. Exact scheduling algorithm, weekly generation time, tie-breaking, and active-turn reassignment.
 5. Takeover timing, reliability attribution, overlapping obligations, and reduced-reward pricing.
@@ -229,7 +229,9 @@ Version 1.1.3 includes:
 - role-aware Demo Mode profiles plus connected-mode contracts for family accounts and server-enforced permissions;
 - planned and actual meal attendance plus at-home presence;
 - weekly scheduling and the three ordinary activities;
-- NFC URL entry points with explicit confirmation;
+- immediate NFC URL entry points with separate arrival and departure tags;
+- staff invalidation of false activity claims with reward reversal and retained history;
+- a monthly cumulative activity chart with one colored line per participant;
 - the milli ledger, balances, and parent corrections;
 - hostile takeovers and black-market agreements;
 - experimental contribution statistics without awarding the Reserve.

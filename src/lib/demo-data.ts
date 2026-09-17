@@ -87,7 +87,7 @@ const mealPlans = (instant: Date): MealPlan[] => {
 };
 
 export const seedSnapshot = (instant = new Date()): AppSnapshot => ({
-  members: seedMembers,
+  members: seedMembers.map((member) => ({ ...member })),
   meals: mealPlans(instant),
   presence: [
     { id: 'presence-1', memberId: 'child-1', action: 'arrive', at: instant.toISOString() },
@@ -96,14 +96,25 @@ export const seedSnapshot = (instant = new Date()): AppSnapshot => ({
   tasks: [
     { id: 'task-dishes-today', activityCode: 'dishes', title: 'Piatti della cena', date: isoDay(0, instant), dueAt: householdDateTimeToIso(`${isoDay(0, instant)}T23:00`), status: 'assigned', assigneeId: 'child-2', rewardMilli: 3 },
     { id: 'task-rubbish', activityCode: 'rubbish', title: 'Portare fuori la spazzatura', date: isoDay(0, instant), dueAt: householdDateTimeToIso(`${isoDay(0, instant)}T22:00`), status: 'open', rewardMilli: 1 },
-    { id: 'task-parcel', activityCode: 'parcel', title: 'Ritirare il pacco Amazon', date: isoDay(0, instant), dueAt: householdDateTimeToIso(`${isoDay(0, instant)}T19:30`), status: 'completed', assigneeId: 'child-2', rewardMilli: 2 },
+    { id: 'task-parcel', activityCode: 'parcel', title: 'Ritirare il pacco Amazon', date: isoDay(0, instant), dueAt: householdDateTimeToIso(`${isoDay(0, instant)}T19:30`), status: 'open', rewardMilli: 2 },
+    { id: 'history-d1', activityCode: 'dishes', title: 'Piatti della cena', date: isoDay(-6, instant), dueAt: householdDateTimeToIso(`${isoDay(-6, instant)}T23:00`), status: 'completed', assigneeId: 'child-1', rewardMilli: 3 },
+    { id: 'history-p1', activityCode: 'parcel', title: 'Ritiro pacco', date: isoDay(-3, instant), dueAt: householdDateTimeToIso(`${isoDay(-3, instant)}T19:30`), status: 'completed', assigneeId: 'child-1', rewardMilli: 2 },
+    { id: 'history-p2', activityCode: 'parcel', title: 'Ritiro pacco', date: isoDay(-4, instant), dueAt: householdDateTimeToIso(`${isoDay(-4, instant)}T19:30`), status: 'completed', assigneeId: 'child-2', rewardMilli: 2 },
+    { id: 'history-r3', activityCode: 'rubbish', title: 'Portare fuori la spazzatura', date: isoDay(-2, instant), dueAt: householdDateTimeToIso(`${isoDay(-2, instant)}T22:00`), status: 'completed', assigneeId: 'child-3', rewardMilli: 1 },
+  ],
+  completions: [
+    { id: 'completion-history-dishes-child-1', taskId: 'history-d1', performedByMemberId: 'child-1', recordedByMemberId: 'child-1', countedMemberIds: ['child-1'], completedAt: new Date(instant.getTime() - 6 * 86_400_000).toISOString(), rewardMilli: 3, source: 'app', status: 'valid' },
+    { id: 'completion-history-parcel-child-1', taskId: 'history-p1', performedByMemberId: 'child-1', recordedByMemberId: 'child-1', countedMemberIds: ['child-1'], completedAt: new Date(instant.getTime() - 3 * 86_400_000).toISOString(), rewardMilli: 2, source: 'app', status: 'valid' },
+    { id: 'completion-history-parcel-child-2', taskId: 'history-p2', performedByMemberId: 'child-2', recordedByMemberId: 'child-2', countedMemberIds: ['child-2'], completedAt: new Date(instant.getTime() - 4 * 86_400_000).toISOString(), rewardMilli: 2, source: 'app', status: 'valid' },
+    { id: 'completion-history-rubbish-child-3', taskId: 'history-r3', performedByMemberId: 'child-3', recordedByMemberId: 'child-3', countedMemberIds: ['child-3'], completedAt: new Date(instant.getTime() - 2 * 86_400_000).toISOString(), rewardMilli: 1, source: 'app', status: 'valid' },
   ],
   wallet: [
-    { id: 'wallet-1', memberId: 'child-1', kind: 'activity_reward', amount: 3, label: 'Piatti — ieri', at: new Date(instant.getTime() - 86_400_000).toISOString() },
-    { id: 'wallet-2', memberId: 'child-1', kind: 'activity_reward', amount: 2, label: 'Pacco Amazon', at: new Date(instant.getTime() - 172_800_000).toISOString() },
+    { id: 'wallet-1', memberId: 'child-1', kind: 'activity_reward', amount: 3, label: 'Piatti — sei giorni fa', at: new Date(instant.getTime() - 6 * 86_400_000).toISOString(), taskId: 'history-d1' },
+    { id: 'wallet-2', memberId: 'child-1', kind: 'activity_reward', amount: 2, label: 'Pacco Amazon', at: new Date(instant.getTime() - 3 * 86_400_000).toISOString(), taskId: 'history-p1' },
     { id: 'wallet-demo-funding', memberId: 'child-1', kind: 'correction', amount: 15, label: 'Dotazione demo', at: new Date(instant.getTime() - 259_200_000).toISOString() },
-    { id: 'wallet-3', memberId: 'child-2', kind: 'activity_reward', amount: 2, label: 'Pacco Amazon', at: new Date(instant.getTime() - 86_400_000).toISOString() },
+    { id: 'wallet-3', memberId: 'child-2', kind: 'activity_reward', amount: 2, label: 'Pacco Amazon', at: new Date(instant.getTime() - 4 * 86_400_000).toISOString(), taskId: 'history-p2' },
     { id: 'wallet-4', memberId: 'child-3', kind: 'correction', amount: -2, label: 'Rettifica genitoriale', at: new Date(instant.getTime() - 259_200_000).toISOString() },
+    { id: 'wallet-5', memberId: 'child-3', kind: 'activity_reward', amount: 1, label: 'Spazzatura', at: new Date(instant.getTime() - 2 * 86_400_000).toISOString(), taskId: 'history-r3' },
   ],
   takeovers: [
     { id: 'takeover-1', taskId: 'task-dishes-today', payerId: 'child-1', recipientId: 'child-2', costMilli: 9, status: 'pending' },

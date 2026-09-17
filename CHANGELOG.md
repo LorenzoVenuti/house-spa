@@ -1,10 +1,21 @@
 # Changelog
 
-All notable changes to Milli e Misfatti are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) in a simplified form.
+All notable changes to House S.p.A. are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) in a simplified form.
 
 ## [Unreleased]
 
-No changes recorded.
+### Added
+
+- Automatic NFC declarations with separate arrival and departure tags.
+- Audited completion invalidation for parents and referees, including reward reversal and task reopening.
+- Monthly cumulative activity chart with one colored line per participant.
+
+### Changed
+
+- App and NFC completion declarations are now considered true immediately; no second confirmation is required.
+- Reworked the interface as a responsive Apple-inspired application, with a floating desktop sidebar, adaptive iPhone tab bar, restrained glass navigation, opaque content surfaces, local vector icons, and a unified design-token system.
+- Renamed the product to **House S.p.A.** across the application, PWA metadata, assets, package metadata, and documentation.
+- Kept fixed demo profiles anonymized for public distribution.
 
 ## [1.1.3] - 2026-09-16
 

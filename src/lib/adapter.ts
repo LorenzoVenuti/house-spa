@@ -1,12 +1,12 @@
 import { householdTimeZone, isHouseholdWeekend, isoDay, seedSnapshot } from './demo-data';
-import type { AppSnapshot, HouseholdAdapter, MealPlanStatus, Member, PresenceAction, Role, RpcResult } from './types';
+import type { ActionSource, AppSnapshot, HouseholdAdapter, MealPlanStatus, Member, PresenceAction, Role, RpcResult, TaskCompletion } from './types';
 
-export const demoSnapshotStorageKey = 'milli-e-misfatti-demo-v3';
-export const memberSelectionStorageKey = 'milli-e-misfatti-member-v3';
+export const demoSnapshotStorageKey = 'house-spa-demo-v4';
+export const memberSelectionStorageKey = 'house-spa-member-v4';
 export const defaultMemberId = 'child-1';
-// Compatibility inputs are read only when their v3 replacement does not exist.
-export const legacyDemoSnapshotStorageKey = 'household-tribunal-demo-v2';
-export const legacyMemberSelectionStorageKey = 'household-tribunal-member';
+// Compatibility inputs are read only when their v4 replacement does not exist.
+export const legacyDemoSnapshotStorageKey = 'milli-e-misfatti-demo-v3';
+export const legacyMemberSelectionStorageKey = 'milli-e-misfatti-member-v3';
 const uuid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const memberColors = ['#D9924A', '#4E8D9A', '#9A6CD0', '#D86B72', '#5982C0', '#6D9E75', '#B8795A', '#547C68'];
 const fixedProfilesByRole = {
@@ -31,7 +31,8 @@ const fixedDisplayNames: Record<string, string> = {
 };
 
 type MigratableMember = Omit<Member, 'active'> & { active?: boolean };
-type MigratableSnapshot = Omit<AppSnapshot, 'members'> & { members: MigratableMember[] };
+type MigratableCompletion = Omit<TaskCompletion, 'countedMemberIds'> & { countedMemberIds?: string[] };
+type MigratableSnapshot = Omit<AppSnapshot, 'members' | 'completions'> & { members: MigratableMember[]; completions?: MigratableCompletion[] };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 const isString = (value: unknown) => typeof value === 'string';
@@ -49,6 +50,7 @@ const isMigratableSnapshot = (value: unknown): value is MigratableSnapshot => {
   const wallet = value.wallet as unknown[];
   const takeovers = value.takeovers as unknown[];
   const deals = value.deals as unknown[];
+  const completions = value.completions === undefined ? [] : value.completions as unknown[];
   return members.every((member) => isRecord(member)
       && isString(member.id) && isString(member.displayName)
       && isOneOf(member.role, ['participant', 'referee', 'parent'])
@@ -67,8 +69,17 @@ const isMigratableSnapshot = (value: unknown): value is MigratableSnapshot => {
       && (task.onlyParticipant === undefined || typeof task.onlyParticipant === 'boolean'))
     && wallet.every((entry) => isRecord(entry)
       && isString(entry.id) && isString(entry.memberId)
-      && isOneOf(entry.kind, ['activity_reward', 'takeover_cost', 'deal_transfer', 'penalty', 'correction'])
+      && isOneOf(entry.kind, ['activity_reward', 'activity_reversal', 'takeover_cost', 'deal_transfer', 'penalty', 'correction'])
       && typeof entry.amount === 'number' && isString(entry.label) && isString(entry.at) && isOptionalString(entry.taskId))
+    && completions.every((completion) => isRecord(completion)
+      && isString(completion.id) && isString(completion.taskId)
+      && isString(completion.performedByMemberId) && isString(completion.recordedByMemberId)
+      && (completion.countedMemberIds === undefined || (Array.isArray(completion.countedMemberIds) && completion.countedMemberIds.every(isString)))
+      && isString(completion.completedAt) && typeof completion.rewardMilli === 'number'
+      && isOneOf(completion.source, ['app', 'nfc', 'staff'])
+      && isOneOf(completion.status, ['valid', 'invalidated'])
+      && isOptionalString(completion.invalidatedAt) && isOptionalString(completion.invalidatedByMemberId)
+      && isOptionalString(completion.invalidationReason))
     && takeovers.every((takeover) => isRecord(takeover)
       && isString(takeover.id) && isString(takeover.taskId) && isString(takeover.payerId) && isString(takeover.recipientId)
       && typeof takeover.costMilli === 'number' && isOneOf(takeover.status, ['pending', 'completed', 'refused', 'expired', 'cancelled']))
@@ -90,6 +101,30 @@ const parseStoredSnapshot = (stored: string | null) => {
 
 const normalizeSnapshot = (snapshot: MigratableSnapshot) => {
   let changed = false;
+  if (!snapshot.completions) {
+    snapshot.completions = snapshot.tasks.flatMap((task) => {
+      if (task.status !== 'completed' || !task.assigneeId) return [];
+      const reward = snapshot.wallet.find((entry) => entry.taskId === task.id && entry.kind === 'activity_reward');
+      return [{
+        id: `completion-migrated-${task.id}`,
+        taskId: task.id,
+        performedByMemberId: task.assigneeId,
+        recordedByMemberId: task.assigneeId,
+        countedMemberIds: [task.assigneeId],
+        completedAt: reward?.at ?? task.dueAt,
+        rewardMilli: task.rewardMilli,
+        source: 'app' as const,
+        status: 'valid' as const,
+      }];
+    });
+    changed = true;
+  }
+  snapshot.completions.forEach((completion) => {
+    if (!completion.countedMemberIds?.length) {
+      completion.countedMemberIds = [completion.performedByMemberId];
+      changed = true;
+    }
+  });
   snapshot.members.forEach((member) => {
     if (typeof member.active !== 'boolean') {
       member.active = true;
@@ -123,6 +158,12 @@ const migrateLegacySnapshot = (snapshot: MigratableSnapshot) => {
   snapshot.presence.forEach((event) => { event.memberId = remap(event.memberId); });
   snapshot.tasks.forEach((task) => { if (task.assigneeId) task.assigneeId = remap(task.assigneeId); });
   snapshot.wallet.forEach((entry) => { entry.memberId = remap(entry.memberId); });
+  snapshot.completions?.forEach((completion) => {
+    completion.performedByMemberId = remap(completion.performedByMemberId);
+    completion.recordedByMemberId = remap(completion.recordedByMemberId);
+    if (completion.countedMemberIds) completion.countedMemberIds = completion.countedMemberIds.map(remap);
+    if (completion.invalidatedByMemberId) completion.invalidatedByMemberId = remap(completion.invalidatedByMemberId);
+  });
   snapshot.takeovers.forEach((takeover) => {
     takeover.payerId = remap(takeover.payerId);
     takeover.recipientId = remap(takeover.recipientId);
@@ -198,28 +239,61 @@ export class DemoAdapter implements HouseholdAdapter {
     meal.status = status; this.emit();
   }
 
-  async recordPresence(action: PresenceAction) {
+  async recordPresence(action: PresenceAction, source: ActionSource = 'app', tagToken?: string) {
     this.activeActor();
-    this.data.presence.push({ id: uuid(), memberId: this.activeMemberId, action, at: new Date().toISOString() });
+    if (source === 'nfc' && tagToken !== `demo-${action}`) throw new Error('INVALID_STATE');
     const member = this.data.members.find((item) => item.id === this.activeMemberId);
-    if (member) member.home = action === 'arrive';
+    const nextHome = action === 'arrive';
+    if (!member || member.home === nextHome) return;
+    this.data.presence.push({ id: uuid(), memberId: this.activeMemberId, action, at: new Date().toISOString(), source });
+    member.home = nextHome;
     this.emit();
   }
 
-  async complete_task(input: { taskId: string; idempotencyKey: string; performedByMemberId: string | null }): Promise<RpcResult> {
+  async complete_task(input: { taskId: string; idempotencyKey: string; performedByMemberId: string | null; source?: ActionSource; tagToken?: string }): Promise<RpcResult> {
     const actor = this.activeActor();
     const task = this.data.tasks.find((item) => item.id === input.taskId);
     if (!task) throw new Error('INVALID_STATE');
-    if (task.status === 'completed') return { completionId: `completion-${task.id}`, rewardMilli: task.rewardMilli, walletBalance: this.balance(input.performedByMemberId ?? task.assigneeId), alreadyCompleted: true };
+    if (input.source === 'nfc' && input.tagToken !== `demo-${task.activityCode}`) throw new Error('INVALID_STATE');
+    if (input.source === 'staff' && !['parent', 'referee'].includes(actor.role)) throw new Error('FORBIDDEN');
+    const existing = this.data.completions.find((completion) => completion.taskId === task.id && completion.status === 'valid');
+    if (existing) return { completionId: existing.id, rewardMilli: existing.rewardMilli, walletBalance: this.balance(existing.performedByMemberId), alreadyCompleted: true };
     if (!input.performedByMemberId) throw new Error('INVALID_STATE');
     const performer = this.data.members.find((item) => item.id === input.performedByMemberId);
     const recordingForAnother = input.performedByMemberId !== this.activeMemberId;
+    if (input.source === 'nfc' && (recordingForAnother || actor.role !== 'participant')) throw new Error('FORBIDDEN');
     if (!performer?.active || (recordingForAnother && actor.role === 'participant')) throw new Error('FORBIDDEN');
     if (!recordingForAnother && task.status === 'assigned' && task.assigneeId !== this.activeMemberId) throw new Error('FORBIDDEN');
+    const completionId = uuid();
+    const completedAt = new Date().toISOString();
+    const completedTakeoverPayer = this.data.takeovers.find((takeover) => takeover.taskId === task.id && takeover.status === 'completed')?.payerId;
+    const countedMemberIds = completedTakeoverPayer && completedTakeoverPayer !== input.performedByMemberId
+      ? [input.performedByMemberId, completedTakeoverPayer]
+      : [input.performedByMemberId];
     task.status = 'completed'; task.assigneeId = input.performedByMemberId;
-    this.data.wallet.push({ id: uuid(), memberId: input.performedByMemberId, kind: 'activity_reward', amount: task.rewardMilli, label: task.title, at: new Date().toISOString(), taskId: task.id });
+    this.data.completions.push({ id: completionId, taskId: task.id, performedByMemberId: input.performedByMemberId, recordedByMemberId: actor.id, countedMemberIds, completedAt, rewardMilli: task.rewardMilli, source: input.source ?? (recordingForAnother ? 'staff' : 'app'), status: 'valid' });
+    this.data.wallet.push({ id: uuid(), memberId: input.performedByMemberId, kind: 'activity_reward', amount: task.rewardMilli, label: task.title, at: completedAt, taskId: task.id });
     this.emit();
-    return { completionId: uuid(), rewardMilli: task.rewardMilli, walletBalance: this.balance(input.performedByMemberId), alreadyCompleted: false };
+    return { completionId, rewardMilli: task.rewardMilli, walletBalance: this.balance(input.performedByMemberId), alreadyCompleted: false };
+  }
+
+  async invalidate_task_completion(input: { completionId: string; reason: string; idempotencyKey: string }): Promise<RpcResult> {
+    const actor = this.activeActor();
+    if (!['parent', 'referee'].includes(actor.role)) throw new Error('FORBIDDEN');
+    if (!input.reason.trim()) throw new Error('INVALID_STATE');
+    const completion = this.data.completions.find((item) => item.id === input.completionId);
+    if (!completion || completion.status !== 'valid') throw new Error('INVALID_STATE');
+    const task = this.data.tasks.find((item) => item.id === completion.taskId);
+    if (!task) throw new Error('INVALID_STATE');
+    const invalidatedAt = new Date().toISOString();
+    completion.status = 'invalidated';
+    completion.invalidatedAt = invalidatedAt;
+    completion.invalidatedByMemberId = actor.id;
+    completion.invalidationReason = input.reason.trim();
+    task.status = task.assigneeId ? 'assigned' : 'open';
+    this.data.wallet.push({ id: uuid(), memberId: completion.performedByMemberId, kind: 'activity_reversal', amount: -completion.rewardMilli, label: `Attività annullata: ${task.title}`, at: invalidatedAt, taskId: task.id });
+    this.emit();
+    return { completionId: completion.id, status: completion.status, reversedMilli: completion.rewardMilli };
   }
 
   async create_takeover(input: { taskId: string; recipientMemberId: string; idempotencyKey: string }): Promise<RpcResult> {
@@ -248,6 +322,8 @@ export class DemoAdapter implements HouseholdAdapter {
     const alreadyCompleted = task?.status === 'completed';
     if (input.resolution === 'completed' && task) {
       task.status = 'completed'; task.assigneeId = takeover.recipientId;
+      const completion = this.data.completions.find((item) => item.taskId === task.id && item.status === 'valid');
+      if (completion && !completion.countedMemberIds.includes(takeover.payerId)) completion.countedMemberIds.push(takeover.payerId);
       this.data.wallet.push({ id: uuid(), memberId: takeover.payerId, kind: 'takeover_cost', amount: -takeover.costMilli, label: 'Takeover completato', at: new Date().toISOString(), taskId: task.id });
       if (!alreadyCompleted) this.data.wallet.push({ id: uuid(), memberId: takeover.recipientId, kind: 'activity_reward', amount: task.rewardMilli, label: task.title, at: new Date().toISOString(), taskId: task.id });
     }
