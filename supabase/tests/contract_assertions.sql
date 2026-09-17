@@ -13,7 +13,9 @@ begin
   foreach item in array required loop
     if to_regclass('public.' || item) is null then raise exception 'missing table %', item; end if;
   end loop;
-  if to_regprocedure('public.complete_task(uuid,uuid,uuid)') is null then raise exception 'missing complete_task'; end if;
+  if to_regprocedure('public.complete_task(uuid,uuid,uuid,text,text)') is null then raise exception 'missing complete_task'; end if;
+  if to_regprocedure('public.record_presence(text,timestamp with time zone,text)') is null then raise exception 'missing record_presence'; end if;
+  if to_regprocedure('public.invalidate_task_completion(uuid,text,uuid)') is null then raise exception 'missing invalidate_task_completion'; end if;
   if to_regprocedure('public.create_takeover(uuid,uuid,uuid)') is null then raise exception 'missing create_takeover'; end if;
   if to_regprocedure('public.resolve_takeover(uuid,text,uuid)') is null then raise exception 'missing resolve_takeover'; end if;
   if to_regprocedure('public.create_deal(uuid,text,integer,timestamp with time zone,uuid)') is null then raise exception 'missing create_deal'; end if;
@@ -25,6 +27,8 @@ begin
   if not has_function_privilege('authenticated', 'public.is_family_member(uuid)', 'EXECUTE') then raise exception 'authenticated RLS helper grant missing'; end if;
   if not has_function_privilege('authenticated', 'public.create_managed_member(text,text)', 'EXECUTE') then raise exception 'authenticated create_managed_member grant missing'; end if;
   if not has_function_privilege('authenticated', 'public.set_member_active(uuid,boolean)', 'EXECUTE') then raise exception 'authenticated set_member_active grant missing'; end if;
+  if not has_function_privilege('authenticated', 'public.invalidate_task_completion(uuid,text,uuid)', 'EXECUTE') then raise exception 'authenticated invalidate_task_completion grant missing'; end if;
+  if not has_function_privilege('authenticated', 'public.record_presence(text,timestamp with time zone,text)', 'EXECUTE') then raise exception 'authenticated record_presence grant missing'; end if;
   if has_function_privilege('anon', 'public.create_managed_member(text,text)', 'EXECUTE') then raise exception 'anon create_managed_member grant is too broad'; end if;
   if has_function_privilege('anon', 'public.set_member_active(uuid,boolean)', 'EXECUTE') then raise exception 'anon set_member_active grant is too broad'; end if;
   if has_function_privilege('anon', 'public.is_family_member(uuid)', 'EXECUTE') then raise exception 'anon RLS helper grant is too broad'; end if;
@@ -51,6 +55,7 @@ begin
        or member.display_name <> expected.display_name
   ) then raise exception 'seed UUID-to-display-name mapping is incorrect'; end if;
   if (select count(*) from pg_policies where schemaname = 'public' and tablename = 'wallet_ledger') = 0 then raise exception 'wallet RLS missing'; end if;
+  if not exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'one_valid_completion_per_task') then raise exception 'valid completion uniqueness missing'; end if;
 end $$;
 
 -- Constraint assertions use a savepoint so they are safe to run in a transaction.

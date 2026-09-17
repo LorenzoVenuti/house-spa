@@ -1,4 +1,4 @@
--- Milli e Misfatti backend schema and transactional RPCs.
+-- House S.p.A. backend schema and transactional RPCs.
 -- The migration is intentionally family-scoped so the pilot can grow beyond one household.
 
 create extension if not exists pgcrypto;

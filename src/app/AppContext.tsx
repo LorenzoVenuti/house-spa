@@ -5,7 +5,7 @@ import type { AppSnapshot } from '../lib/types';
 import { AppContext } from './app-context';
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [snapshot, setSnapshot] = useState<AppSnapshot>(() => ({ members: [], meals: [], presence: [], tasks: [], wallet: [], takeovers: [], deals: [] }));
+  const [snapshot, setSnapshot] = useState<AppSnapshot>(() => ({ members: [], meals: [], presence: [], tasks: [], completions: [], wallet: [], takeovers: [], deals: [] }));
   const [memberId, setMemberIdState] = useState(() => readInitialMemberId(globalThis.localStorage));
   const memberIdRef = useRef(memberId);
   useEffect(() => {

@@ -1,6 +1,6 @@
 # Release procedure
 
-This is the preparation and release checklist for Milli e Misfatti **v1.1.3**. No GitHub release, tag, deployment, live provider project, or production scheduler is part of the current baseline.
+This is the preparation and release checklist for House S.p.A. **v1.1.3**. **No release, tag, deployment, live provider project, or production scheduler has been created by this project work.** Every external action requires separate authorization.
 
 Releases are prepared from `main` only after review. Git tracks the application version; the application audit log tracks corrections to family data. A release must not contain credentials, real-family exports, personal contact data, or unreviewed schema changes.
 
@@ -13,7 +13,7 @@ node -p "require('./package.json').version"
 rg -n '1\.1\.3|v1\.1\.3' package.json package-lock.json vite.config.ts README.md CHANGELOG.md SECURITY.md DECISIONS.md docs
 ```
 
-The package/repository slug is `milli-e-misfatti`; the product display name is `Milli e Misfatti`.
+The package/repository slug is `house-spa`; the product display name is `House S.p.A.`.
 
 ## Local verification gates
 
@@ -37,14 +37,15 @@ supabase test db
 
 Record command output, environment versions, SQL migration filenames, and any skipped check. A successful frontend build does not prove database behavior, provider configuration, NFC hardware, or deployment readiness.
 
-## Private repository preparation
+## GitHub update preparation
 
-Before publishing a new revision:
+The repository is published from an isolated, sanitized history. Before an authorized update:
 
-1. Review every tracked path and the complete Git history for credentials, local environment files, real-family data, personal contact details, and generated artifacts.
-2. Confirm the repository remains private before pushing.
+1. Start from a fresh clone of the verified remote and compare it with the recorded publication state.
+2. Review every changed path and the complete outgoing Git history for credentials, real-family data, personal contact details, and generated artifacts.
 3. Confirm the display name, slug, version, README, changelog, security policy, and all-rights-reserved notice.
-4. Verify the pushed commit and repository visibility by reading them back before reporting publication complete.
+4. Preserve the private source project and use the explicitly approved publication workflow and staging boundary.
+5. Verify the merged remote commit and repository settings by reading them back before reporting the update complete.
 
 ## Promotion gates
 
@@ -59,8 +60,8 @@ Before publishing a new revision:
 ## v1.1.3 checklist
 
 - [ ] `package.json`, `package-lock.json`, documentation, and visible UI all report `1.1.3`.
-- [ ] Product metadata, PWA assets, offline page, and accessible labels use `Milli e Misfatti`.
-- [ ] Demo profiles use only Child 1, Child 2, Child 3, Mamma, Papà, and Cleaning Lady as fixed display names.
+- [ ] Product metadata, PWA assets, offline page, and accessible labels use `House S.p.A.`.
+- [ ] Demo profiles use only Child 1, Child 2, Child 3, Mamma, Papà, and Cleaning Lady.
 - [ ] Inactive members remain in history and administration but are absent from the global profile selector and future-facing choices.
 - [ ] `npm ci` and all frontend CI gates pass.
 - [ ] The Supabase SQL suite passes in a compatible local environment.
@@ -73,7 +74,7 @@ Before publishing a new revision:
 
 ## Tagging after authorization
 
-Only after a private remote exists, the release commit is approved, and all applicable gates pass:
+Only after the remote exists, the release commit is approved, and all applicable gates pass:
 
 ```bash
 git tag -a v1.1.3 -m "Release v1.1.3"

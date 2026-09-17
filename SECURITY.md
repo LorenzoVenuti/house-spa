@@ -2,13 +2,13 @@
 
 ## Supported version
 
-Version **1.1.3** is the only supported version while Milli e Misfatti remains a private pilot project. No public release or production deployment has been performed.
+Version **1.1.3** is the only supported version while House S.p.A. remains a public-source pilot project. No production deployment has been performed.
 
 ## Reporting a vulnerability
 
 Do not disclose vulnerabilities, family data, credentials, or exploit details in a public issue.
 
-Use a private security advisory when that feature is available. Otherwise, notify the repository owner through an already established private channel and share only the minimum information needed to coordinate a secure report. No public contact address is published by this project.
+Use GitHub private vulnerability reporting or a draft security advisory when available. Otherwise notify the repository owner through an already established private channel and share only the minimum information needed to coordinate a secure report. No public contact address is published by this project.
 
 Include the affected version, impacted component, reproduction conditions, likely impact, and any safe mitigation. Do not access real family data, test against systems you do not own, or perform destructive validation.
 

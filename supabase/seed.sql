@@ -1,6 +1,6 @@
 -- Synthetic local/demo data only. No auth identities or real email addresses are created.
 insert into public.families(id, name, timezone)
-values ('00000000-0000-0000-0000-000000000001', 'Milli e Misfatti Demo', 'Europe/Rome')
+values ('00000000-0000-0000-0000-000000000001', 'House S.p.A. Demo', 'Europe/Rome')
 on conflict (id) do nothing;
 
 insert into public.scheduler_config(family_id)
@@ -26,7 +26,8 @@ on conflict (family_id, code) do nothing;
 
 insert into public.nfc_tags(family_id, token_hash, label, action)
 values
-  ('00000000-0000-0000-0000-000000000001', encode(digest('demo-entry', 'sha256'), 'hex'), 'Ingresso', 'entry'),
+  ('00000000-0000-0000-0000-000000000001', encode(digest('demo-arrive', 'sha256'), 'hex'), 'Arrivo', 'arrive'),
+  ('00000000-0000-0000-0000-000000000001', encode(digest('demo-leave', 'sha256'), 'hex'), 'Uscita', 'leave'),
   ('00000000-0000-0000-0000-000000000001', encode(digest('demo-dishes', 'sha256'), 'hex'), 'Piatti', 'dishes'),
   ('00000000-0000-0000-0000-000000000001', encode(digest('demo-rubbish', 'sha256'), 'hex'), 'Spazzatura', 'rubbish'),
   ('00000000-0000-0000-0000-000000000001', encode(digest('demo-parcel', 'sha256'), 'hex'), 'Pacco', 'parcel')
